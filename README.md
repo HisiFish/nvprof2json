@@ -15,8 +15,10 @@ Tested with CUDA 8.0.
 ## How to use
 
 ```
-nvprof -o foo.nvvp your_program
-nvprof2json foo.nvvp > foo.json
+Generate nvprof file(use nvprof tool):
+  nvprof -o foo.nvvp your_program
+Translate:
+  nvprof2json foo.nvvp > foo.json
 # Open foo.json in chrome://tracing
 ```
 
