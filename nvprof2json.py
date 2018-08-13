@@ -8,10 +8,11 @@ import copy
 
 def main():
     parser = argparse.ArgumentParser(description='Convert nvprof output to Google Event Trace compatible JSON.')
-    parser.add_argument('filename')
+    parser.add_argument('src')
+    parser.add_argument('dst')
     args = parser.parse_args()
 
-    conn = sqlite3.connect(args.filename)
+    conn = sqlite3.connect(args.src)
     conn.row_factory = sqlite3.Row
 
     strings = {}
@@ -147,6 +148,49 @@ def main():
                 }
         traceEvents.append(event)
 
+    """
+    _id_: 1
+    flags: 0
+    bytes: 7436640
+    start: 1496933426915778221
+    end: 1496933426916558424
+    deviceId: 0
+    contextId: 1
+    streamId: 7
+    srcDeviceId: 1
+    dstDeviceId: 2
+    NOTICE: The p2p invocations num in generated timeline is half of that in NVVP.
+    Because this is unidirectional while NVVP is bidirectional.
+    For example, 'GPU2 -> GPU3' and 'GPU3 -> GPU2' are both counted in NVVP for GPU2.
+    While only 'GPU2 -> GPU3' is counted in timeline.    
+    """
+    for row in conn.execute("SELECT * FROM CUPTI_ACTIVITY_KIND_MEMCPY2"):
+        copyKind = 'P2P'
+        if row["flags"] == 0:
+            flags = "sync"
+        elif row["flags"] == 1:
+            flags = "async"
+        else:
+            flags = str(row["flags"])
+        event = {
+                "name": "Memcpy {} [{}]".format(copyKind, flags),
+                "ph": "X", # Complete Event (Begin + End event)
+                "cat": "cuda",
+                "ts": munge_time(row["start"]),
+                "dur": munge_time(row["end"] - row["start"]),
+                "tid": "MemCpy ({})".format(copyKind),
+                # TODO: lookup GPU name.  This is tored in
+                # CUPTI_ACTIVITY_KIND_DEVICE
+                "pid": "[{}:{}] Overview".format(row["deviceId"], row["contextId"]),
+                "args": {
+                    "Size": sizeof_fmt(row["bytes"]),
+                    "source_device": row['srcDeviceId'],
+                    "destination_device": row['dstDeviceId'],
+                    # TODO: More
+                    },
+                }
+        traceEvents.append(event)
+        
     # name: index into StringTable
     # What is thed difference between end and completed?
     """
@@ -200,9 +244,8 @@ def main():
         traceEvents.append(event)
         traceEvents.append(alt_event)
 
-
-    json.dump(traceEvents, sys.stdout)
-    print()
+    with open(args.dst, 'w') as fh:
+        json.dump(traceEvents, fh)
 
 def munge_time(t):
     """Take a time from nvprof and convert it into a chrome://tracing time."""
