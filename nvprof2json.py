@@ -296,7 +296,7 @@ def eprintRow(row):
 
 def eprint(*args, **kwargs):
     """Print to stderr."""
-    print(*args, file=sys.stderr, **kwargs)
+    print(args, kwargs)
 
 def inspect_db(conn):
     """Quickly dump data of all tables in database, with field names."""
